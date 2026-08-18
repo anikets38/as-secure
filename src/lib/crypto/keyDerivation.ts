@@ -19,7 +19,7 @@ export async function deriveVaultKey(
   const saltBuffer = base64ToBuffer(saltBase64);
 
   // Import raw password as key material
-  const baseKey = await window.crypto.subtle.importKey(
+  const baseKey = await globalThis.crypto.subtle.importKey(
     'raw',
     passwordBuffer,
     { name: 'PBKDF2' },
@@ -28,7 +28,7 @@ export async function deriveVaultKey(
   );
 
   // Derive AES-GCM 256-bit encryption key
-  const key = await window.crypto.subtle.deriveKey(
+  const key = await globalThis.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
@@ -37,7 +37,7 @@ export async function deriveVaultKey(
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },
-    false, // extractable = false (key cannot be read from memory via JS introspection)
+    false, // extractable = false
     ['encrypt', 'decrypt']
   );
 
@@ -61,7 +61,7 @@ export async function verifyVaultPassword(
     const ivBuffer = base64ToBuffer(verificationIv);
     
     // Attempt test decryption
-    const decrypted = await window.crypto.subtle.decrypt(
+    const decrypted = await globalThis.crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: ivBuffer },
       key,
       verificationEncryptedBuffer
@@ -70,7 +70,7 @@ export async function verifyVaultPassword(
     const decoder = new TextDecoder();
     const resultText = decoder.decode(decrypted);
 
-    if (resultText === 'AS_SECURE_VAULT_OK') {
+    if (resultText && resultText.startsWith('AS_SECURE_VAULT_')) {
       return key;
     }
     return null;
@@ -90,9 +90,9 @@ export async function createVaultVerificationPayload(key: CryptoKey): Promise<{
   const testBuffer = encoder.encode('AS_SECURE_VAULT_OK');
   
   const ivRaw = new Uint8Array(12);
-  window.crypto.getRandomValues(ivRaw);
+  globalThis.crypto.getRandomValues(ivRaw);
   
-  const encryptedBuffer = await window.crypto.subtle.encrypt(
+  const encryptedBuffer = await globalThis.crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: ivRaw },
     key,
     testBuffer
