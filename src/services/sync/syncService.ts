@@ -26,7 +26,13 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
       return { syncedCount: 0, error: error.message };
     }
 
-    if (!cloudDocs) {
+    if (!cloudDocs || cloudDocs.length === 0) {
+      // If cloud vault is empty, clear local IndexedDB cache for this user
+      const localDocs = await db.documents.where('userId').equals(userId).toArray();
+      for (const doc of localDocs) {
+        await db.documents.delete(doc.id);
+        await db.cachedFiles.delete(doc.id);
+      }
       return { syncedCount: 0 };
     }
 
