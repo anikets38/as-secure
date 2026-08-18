@@ -245,7 +245,7 @@ export const Documents: React.FC = () => {
             </div>
 
             {/* Modal Content Body */}
-            <div className="flex-1 p-4 overflow-y-auto min-h-[400px] flex items-center justify-center bg-vault-bg">
+            <div className="flex-1 p-4 overflow-y-auto min-h-[350px] sm:min-h-[400px] flex items-center justify-center bg-vault-bg">
               {loadingPreview ? (
                 <div className="text-center space-y-2">
                   <div className="w-8 h-8 border-2 border-brand-pink border-t-transparent rounded-full animate-spin mx-auto" />
@@ -258,16 +258,40 @@ export const Documents: React.FC = () => {
                 </div>
               ) : previewBlobUrl ? (
                 previewMimeType?.includes('pdf') ? (
-                  <iframe
-                    src={previewBlobUrl}
-                    className="w-full h-[600px] rounded-xl border border-vault-border"
-                    title="PDF Viewer"
-                  />
+                  <div className="w-full h-full flex flex-col items-center justify-center space-y-4 p-2 sm:p-4 text-center">
+                    {/* Desktop Iframe */}
+                    <iframe
+                      src={previewBlobUrl}
+                      className="w-full h-[550px] rounded-xl border border-vault-border hidden sm:block"
+                      title="PDF Viewer"
+                    />
+                    {/* Mobile PDF Native Viewer Trigger Card */}
+                    <div className="sm:hidden bg-vault-surface border border-vault-border p-6 rounded-2xl w-full max-w-sm space-y-4 text-center shadow-vault-sm">
+                      <div className="w-14 h-14 rounded-2xl bg-brand-pink/15 text-brand-pink mx-auto flex items-center justify-center font-extrabold text-sm shadow-vault-glow">
+                        PDF
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-vault-text">{previewDoc.title}</h4>
+                        <p className="text-xs text-vault-muted">
+                          Decrypted in memory. Mobile browsers use native PDF readers for full view.
+                        </p>
+                      </div>
+                      <a
+                        href={previewBlobUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center space-x-2 py-3 px-4 rounded-xl bg-brand-gradient text-white text-xs font-bold w-full shadow-vault-glow hover:opacity-95 transition"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>Open PDF in Mobile Reader</span>
+                      </a>
+                    </div>
+                  </div>
                 ) : (
                   <img
                     src={previewBlobUrl}
                     alt={previewDoc.title}
-                    className="max-h-[600px] object-contain rounded-xl shadow"
+                    className="max-h-[500px] sm:max-h-[600px] object-contain rounded-xl shadow"
                   />
                 )
               ) : null}
