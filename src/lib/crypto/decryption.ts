@@ -10,7 +10,7 @@ export async function decryptFileBuffer(
 ): Promise<ArrayBuffer> {
   const ivBuffer = base64ToBuffer(ivBase64);
 
-  const decryptedBuffer = await window.crypto.subtle.decrypt(
+  const decryptedBuffer = await globalThis.crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
       iv: ivBuffer

@@ -26,14 +26,14 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [autoLockMinutes, setAutoLockMinutesState] = useState<number>(15);
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Synchronize Vault salt & verification payload across devices on load
+  // Synchronize Vault salt & verification payload across all devices on load
   useEffect(() => {
     async function checkVaultStatus() {
       let metadata = await db.vaultMetadata.get('vault_metadata');
       let payload = await db.cachedFiles.get('vault_verification_payload');
 
-      // If missing locally, attempt download from Supabase Postgres (e.g. logging in on a new device like Mobile)
-      if ((!metadata || !payload) && session.user?.id && isSupabaseConfigured && navigator.onLine) {
+      // Sync with Supabase Cloud if online & logged in
+      if (session.user?.id && isSupabaseConfigured && navigator.onLine) {
         try {
           const { data: cloudVault } = await supabase
             .from('documents')
@@ -48,24 +48,31 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               const [salt, verificationBlobBase64, verificationIvBase64] = parts;
               const now = new Date().toISOString();
 
-              metadata = {
-                id: 'vault_metadata',
-                salt,
-                keyVersion: 1,
-                createdAt: now,
-                updatedAt: now
-              };
-              await db.vaultMetadata.put(metadata);
+              // If local salt differs from cloud salt, update local IndexedDB to match cloud
+              if (!metadata || metadata.salt !== salt) {
+                metadata = {
+                  id: 'vault_metadata',
+                  salt,
+                  keyVersion: 1,
+                  createdAt: now,
+                  updatedAt: now
+                };
+                await db.vaultMetadata.put(metadata);
 
-              const encryptedBuffer = base64ToBuffer(verificationBlobBase64);
-              payload = {
-                id: 'vault_verification_payload',
-                encryptedBlob: encryptedBuffer,
-                iv: verificationIvBase64,
-                mimeType: 'text/plain',
-                updatedAt: now
-              };
-              await db.cachedFiles.put(payload);
+                const encryptedBuffer = base64ToBuffer(verificationBlobBase64);
+                payload = {
+                  id: 'vault_verification_payload',
+                  encryptedBlob: encryptedBuffer,
+                  iv: verificationIvBase64,
+                  mimeType: 'text/plain',
+                  updatedAt: now
+                };
+                await db.cachedFiles.put(payload);
+
+                // Lock vault to ensure re-derivation with updated cloud salt
+                setActiveKey(null);
+                setIsVaultUnlocked(false);
+              }
             }
           }
         } catch (cloudErr) {

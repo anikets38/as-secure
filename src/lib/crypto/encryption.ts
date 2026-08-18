@@ -11,7 +11,7 @@ export async function encryptFileBuffer(
 ): Promise<EncryptedDataPayload> {
   const { raw: ivRaw, base64: ivBase64 } = generateRandomIV(12);
 
-  const encryptedBuffer = await window.crypto.subtle.encrypt(
+  const encryptedBuffer = await globalThis.crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
       iv: ivRaw
