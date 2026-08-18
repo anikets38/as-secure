@@ -1,9 +1,35 @@
 import { db } from '@/lib/db/db';
 import { encryptFileBuffer } from '@/lib/crypto/encryption';
 import { decryptFileBuffer } from '@/lib/crypto/decryption';
-import { computeFileHash } from '@/lib/crypto/cryptoUtils';
+import { computeFileHash, base64ToBuffer, bufferToBase64 } from '@/lib/crypto/cryptoUtils';
 import { DocumentRecord } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+
+/**
+ * Combines 12-byte raw IV and encrypted ciphertext into a single self-contained ArrayBuffer
+ * for cloud storage: [ 12-byte IV ][ AES-GCM Ciphertext ]
+ */
+function packIvAndCiphertext(ivBase64: string, ciphertextBuffer: ArrayBuffer): ArrayBuffer {
+  const ivBuffer = base64ToBuffer(ivBase64);
+  const combined = new Uint8Array(ivBuffer.byteLength + ciphertextBuffer.byteLength);
+  combined.set(new Uint8Array(ivBuffer), 0);
+  combined.set(new Uint8Array(ciphertextBuffer), ivBuffer.byteLength);
+  return combined.buffer;
+}
+
+/**
+ * Unpacks self-contained cloud payload into ivBase64 and encrypted ciphertext ArrayBuffer
+ */
+function unpackIvAndCiphertext(packedBuffer: ArrayBuffer): { ivBase64: string; ciphertextBuffer: ArrayBuffer } {
+  const packedArray = new Uint8Array(packedBuffer);
+  const ivRaw = packedArray.slice(0, 12);
+  const ciphertextRaw = packedArray.slice(12);
+
+  return {
+    ivBase64: bufferToBase64(ivRaw.buffer),
+    ciphertextBuffer: ciphertextRaw.buffer
+  };
+}
 
 export async function uploadDocumentService({
   file,
@@ -66,11 +92,12 @@ export async function uploadDocumentService({
 
     await db.documents.put(documentRecord);
 
-    // 5. If Supabase is configured & online, attempt cloud upload
+    // 5. If Supabase is configured & online, upload packed payload [ 12-byte IV ][ Ciphertext ]
     if (isSupabaseConfigured && navigator.onLine) {
       try {
-        const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
-        
+        const packedPayload = packIvAndCiphertext(iv, encryptedBuffer);
+        const encryptedBlob = new Blob([packedPayload], { type: 'application/octet-stream' });
+
         const { error: storageError } = await supabase.storage
           .from('documents')
           .upload(storagePath, encryptedBlob, { contentType: 'application/octet-stream', upsert: true });
@@ -123,29 +150,34 @@ export async function getDecryptedDocumentBlobUrl(
       return { error: 'Document record not found.' };
     }
 
-    // If file is missing locally, attempt download from Supabase Storage if online
+    // If file is missing locally, download self-contained binary from Supabase Storage
     if (!cached && isSupabaseConfigured && navigator.onLine) {
       const { data, error } = await supabase.storage
         .from('documents')
         .download(docRecord.storagePath);
 
       if (error || !data) {
-        return { error: 'Document binary unavailable offline. Please reconnect to internet.' };
+        return { error: 'Document binary unavailable offline. Connect to internet once to download.' };
       }
 
-      const downloadedBuffer = await data.arrayBuffer();
-      // Store in local IndexedDB for future offline viewing
+      const packedBuffer = await data.arrayBuffer();
+      const { ivBase64, ciphertextBuffer } = unpackIvAndCiphertext(packedBuffer);
+
+      // Save unpacked payload in local IndexedDB for future offline viewing
       cached = {
         id: docId,
-        encryptedBlob: downloadedBuffer,
-        iv: '', // Note: if IV is stored in metadata or payload
+        encryptedBlob: ciphertextBuffer,
+        iv: ivBase64,
         mimeType: docRecord.mimeType,
         updatedAt: new Date().toISOString()
       };
+
+      await db.cachedFiles.put(cached);
+      await db.documents.update(docId, { localAvailable: true });
     }
 
-    if (!cached) {
-      return { error: 'Document is not available offline on this device.' };
+    if (!cached || !cached.iv) {
+      return { error: 'Document binary is not available on this device.' };
     }
 
     // Decrypt in memory

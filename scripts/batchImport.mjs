@@ -12,7 +12,6 @@ const SOURCE_DIR = 'D:\\Desktop\\Aniket Documents';
 const USER_EMAIL = 'aniket.shinde21450@gmail.com';
 const USER_PASS = 'aniket123***';
 
-// Master Vault Password set by user (or default)
 const VAULT_PASS = process.env.VAULT_PASS || 'vault123456';
 
 function categorizeFilename(filename) {
@@ -41,7 +40,6 @@ function getMimeType(filename) {
   return 'application/octet-stream';
 }
 
-// PBKDF2 Web Crypto Key Derivation (identical to browser keyDerivation.ts)
 async function deriveKey(password, saltBase64) {
   const encoder = new TextEncoder();
   const passwordBuffer = encoder.encode(password);
@@ -71,21 +69,22 @@ async function deriveKey(password, saltBase64) {
   return key;
 }
 
-// AES-GCM File Encryption
-async function encryptBuffer(buffer, key) {
+// Encrypts file and prepends 12-byte raw IV: [ 12-byte IV ][ AES-GCM Ciphertext ]
+async function encryptAndPackBuffer(buffer, key) {
   const ivRaw = new Uint8Array(12);
   globalThis.crypto.getRandomValues(ivRaw);
 
-  const encryptedBuffer = await globalThis.crypto.subtle.encrypt(
+  const encryptedCiphertext = await globalThis.crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: ivRaw },
     key,
     buffer
   );
 
-  return {
-    encryptedBuffer: Buffer.from(encryptedBuffer),
-    ivBase64: Buffer.from(ivRaw).toString('base64')
-  };
+  const combined = new Uint8Array(ivRaw.byteLength + encryptedCiphertext.byteLength);
+  combined.set(ivRaw, 0);
+  combined.set(new Uint8Array(encryptedCiphertext), ivRaw.byteLength);
+
+  return Buffer.from(combined);
 }
 
 async function main() {
@@ -103,7 +102,10 @@ async function main() {
   const userId = authData.user.id;
   console.log(`✅ Supabase User ID: ${userId}`);
 
-  // Generate or use salt (16 bytes random salt)
+  // 1. Clear existing duplicate document metadata records for clean database
+  console.log(`🧹 Clearing previous duplicate document records for ${USER_EMAIL}...`);
+  await supabase.from('documents').delete().eq('user_id', userId);
+
   const saltBase64 = Buffer.from(crypto.randomBytes(16)).toString('base64');
   const key = await deriveKey(VAULT_PASS, saltBase64);
 
@@ -129,24 +131,24 @@ async function main() {
 
     console.log(`[${i + 1}/${files.length}] Encrypting & Uploading: ${filename} (${(stat.size / 1024).toFixed(1)} KB)...`);
 
-    // Client-side AES-GCM 256 Encryption
-    const { encryptedBuffer, ivBase64 } = await encryptBuffer(fileBuffer, key);
+    // Encrypt file with self-contained payload [ 12-byte IV ][ Ciphertext ]
+    const packedBuffer = await encryptAndPackBuffer(fileBuffer, key);
 
-    // 1. Upload encrypted blob to Supabase Storage
+    // 1. Upload packed binary payload to Supabase Storage
     const { error: storageErr } = await supabase.storage
       .from('documents')
-      .upload(storagePath, encryptedBuffer, {
+      .upload(storagePath, packedBuffer, {
         contentType: 'application/octet-stream',
         upsert: true
       });
 
     if (storageErr) {
-      console.warn(`  ⚠️ Storage upload warning for ${filename}:`, storageErr.message);
+      console.warn(`  ⚠️ Storage upload warning:`, storageErr.message);
     }
 
-    // 2. Insert metadata record into Supabase Postgres
+    // 2. Insert clean metadata record into Supabase Postgres
     const now = new Date().toISOString();
-    const { error: dbErr } = await supabase.from('documents').upsert({
+    const { error: dbErr } = await supabase.from('documents').insert({
       id: docId,
       user_id: userId,
       title: title,
@@ -163,12 +165,12 @@ async function main() {
     if (dbErr) {
       console.error(`  ❌ Postgres metadata error for ${filename}:`, dbErr.message);
     } else {
-      console.log(`  ✅ Successfully stored & encrypted in Cloud Vault!`);
+      console.log(`  ✅ Stored cleanly!`);
       successCount++;
     }
   }
 
-  console.log(`\n🎉 Batch Import Complete! ${successCount}/${files.length} documents uploaded and encrypted in AS Secure Cloud Vault.`);
+  console.log(`\n🎉 Re-Upload Complete! ${successCount}/${files.length} unique documents encrypted & stored in Cloud Vault.`);
 }
 
 main().catch(err => {
