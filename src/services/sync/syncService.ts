@@ -26,21 +26,17 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
       return { syncedCount: 0, error: error.message };
     }
 
-    if (!cloudDocs || cloudDocs.length === 0) {
-      // If cloud vault is empty, clear local IndexedDB cache for this user
-      const localDocs = await db.documents.where('userId').equals(userId).toArray();
-      for (const doc of localDocs) {
-        await db.documents.delete(doc.id);
-        await db.cachedFiles.delete(doc.id);
-      }
+    if (!cloudDocs) {
       return { syncedCount: 0 };
     }
 
-    const cloudDocMap = new Map(cloudDocs.map(c => [c.id, c]));
+    // Filter out system control rows like __VAULT_SALT_PAYLOAD__
+    const userCloudDocs = cloudDocs.filter(c => c.title !== '__VAULT_SALT_PAYLOAD__');
+    const cloudDocMap = new Map(userCloudDocs.map(c => [c.id, c]));
     let syncedCount = 0;
 
-    // 2. Reconcile each cloud document record into local IndexedDB
-    for (const cloudDoc of cloudDocs) {
+    // 2. Reconcile each user cloud document record into local IndexedDB
+    for (const cloudDoc of userCloudDocs) {
       const cachedFile = await db.cachedFiles.get(cloudDoc.id);
 
       const reconciledRecord: DocumentRecord = {

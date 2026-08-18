@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { db } from '@/lib/db/db';
 import { deriveVaultKey, verifyVaultPassword, createVaultVerificationPayload } from '@/lib/crypto/keyDerivation';
 import { bufferToBase64, base64ToBuffer } from '@/lib/crypto/cryptoUtils';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface VaultContextType {
   isVaultCreated: boolean;
@@ -17,17 +19,61 @@ interface VaultContextType {
 const VaultContext = createContext<VaultContextType | undefined>(undefined);
 
 export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { session } = useAuth();
   const [isVaultCreated, setIsVaultCreated] = useState<boolean>(false);
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [activeKey, setActiveKey] = useState<CryptoKey | null>(null);
   const [autoLockMinutes, setAutoLockMinutesState] = useState<number>(15);
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Check vault initialization status on load
+  // Synchronize Vault salt & verification payload across devices on load
   useEffect(() => {
     async function checkVaultStatus() {
-      const metadata = await db.vaultMetadata.get('vault_metadata');
-      setIsVaultCreated(Boolean(metadata));
+      let metadata = await db.vaultMetadata.get('vault_metadata');
+      let payload = await db.cachedFiles.get('vault_verification_payload');
+
+      // If missing locally, attempt download from Supabase Postgres (e.g. logging in on a new device like Mobile)
+      if ((!metadata || !payload) && session.user?.id && isSupabaseConfigured && navigator.onLine) {
+        try {
+          const { data: cloudVault } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .eq('title', '__VAULT_SALT_PAYLOAD__')
+            .maybeSingle();
+
+          if (cloudVault && cloudVault.storage_path) {
+            const parts = cloudVault.storage_path.split('::');
+            if (parts.length === 3) {
+              const [salt, verificationBlobBase64, verificationIvBase64] = parts;
+              const now = new Date().toISOString();
+
+              metadata = {
+                id: 'vault_metadata',
+                salt,
+                keyVersion: 1,
+                createdAt: now,
+                updatedAt: now
+              };
+              await db.vaultMetadata.put(metadata);
+
+              const encryptedBuffer = base64ToBuffer(verificationBlobBase64);
+              payload = {
+                id: 'vault_verification_payload',
+                encryptedBlob: encryptedBuffer,
+                iv: verificationIvBase64,
+                mimeType: 'text/plain',
+                updatedAt: now
+              };
+              await db.cachedFiles.put(payload);
+            }
+          }
+        } catch (cloudErr) {
+          console.warn('Cloud vault settings sync deferred:', cloudErr);
+        }
+      }
+
+      setIsVaultCreated(Boolean(metadata && payload));
 
       const settings = await db.settings.get('vault_settings');
       if (settings?.autoLockMinutes !== undefined) {
@@ -35,7 +81,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
     checkVaultStatus();
-  }, []);
+  }, [session.user?.id]);
 
   // Auto-lock countdown timer handler
   const resetAutoLockTimer = () => {
@@ -76,6 +122,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const { key, salt } = await deriveVaultKey(password);
       const { encryptedBuffer, iv } = await createVaultVerificationPayload(key);
+      const verificationBlobBase64 = bufferToBase64(encryptedBuffer);
 
       await db.vaultMetadata.put({
         id: 'vault_metadata',
@@ -85,7 +132,6 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updatedAt: new Date().toISOString()
       });
 
-      // Save encrypted verification payload to settings
       await db.settings.put({
         id: 'vault_settings',
         autoLockMinutes: 15,
@@ -93,7 +139,6 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isLocalOnlyMode: true
       });
 
-      // Store verification payload raw bytes in indexedDB cached table
       await db.cachedFiles.put({
         id: 'vault_verification_payload',
         encryptedBlob: encryptedBuffer,
@@ -101,6 +146,23 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         mimeType: 'text/plain',
         updatedAt: new Date().toISOString()
       });
+
+      // Sync vault salt & payload to Supabase Postgres for cross-device key derivation
+      if (session.user?.id && isSupabaseConfigured && navigator.onLine) {
+        const payloadString = `${salt}::${verificationBlobBase64}::${iv}`;
+        await supabase.from('documents').upsert({
+          id: '00000000-0000-0000-0000-000000000000',
+          user_id: session.user.id,
+          title: '__VAULT_SALT_PAYLOAD__',
+          category_id: 'cat_system',
+          storage_path: payloadString,
+          mime_type: 'application/x-vault-settings',
+          file_size: payloadString.length,
+          encryption_version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
 
       setActiveKey(key);
       setIsVaultUnlocked(true);
@@ -113,8 +175,44 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const unlockVault = async (password: string) => {
     try {
-      const metadata = await db.vaultMetadata.get('vault_metadata');
-      const payload = await db.cachedFiles.get('vault_verification_payload');
+      let metadata = await db.vaultMetadata.get('vault_metadata');
+      let payload = await db.cachedFiles.get('vault_verification_payload');
+
+      if ((!metadata || !payload) && session.user?.id && isSupabaseConfigured && navigator.onLine) {
+        const { data: cloudVault } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('title', '__VAULT_SALT_PAYLOAD__')
+          .maybeSingle();
+
+        if (cloudVault && cloudVault.storage_path) {
+          const parts = cloudVault.storage_path.split('::');
+          if (parts.length === 3) {
+            const [salt, verificationBlobBase64, verificationIvBase64] = parts;
+            const now = new Date().toISOString();
+
+            metadata = {
+              id: 'vault_metadata',
+              salt,
+              keyVersion: 1,
+              createdAt: now,
+              updatedAt: now
+            };
+            await db.vaultMetadata.put(metadata);
+
+            const encryptedBuffer = base64ToBuffer(verificationBlobBase64);
+            payload = {
+              id: 'vault_verification_payload',
+              encryptedBlob: encryptedBuffer,
+              iv: verificationIvBase64,
+              mimeType: 'text/plain',
+              updatedAt: now
+            };
+            await db.cachedFiles.put(payload);
+          }
+        }
+      }
 
       if (!metadata || !payload) {
         return { success: false, error: 'Vault metadata missing or corrupted.' };
@@ -129,6 +227,23 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (!key) {
         return { success: false, error: 'Incorrect vault password.' };
+      }
+
+      // Sync vault salt & payload to Supabase Postgres if missing
+      if (session.user?.id && isSupabaseConfigured && navigator.onLine) {
+        const payloadString = `${metadata.salt}::${bufferToBase64(payload.encryptedBlob)}::${payload.iv}`;
+        await supabase.from('documents').upsert({
+          id: '00000000-0000-0000-0000-000000000000',
+          user_id: session.user.id,
+          title: '__VAULT_SALT_PAYLOAD__',
+          category_id: 'cat_system',
+          storage_path: payloadString,
+          mime_type: 'application/x-vault-settings',
+          file_size: payloadString.length,
+          encryption_version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       }
 
       setActiveKey(key);
