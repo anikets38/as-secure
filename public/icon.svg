@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D65DB1" />
+      <stop offset="50%" stop-color="#FF6F91" />
+      <stop offset="100%" stop-color="#FF9671" />
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#151B2B" />
+      <stop offset="100%" stop-color="#0B1120" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background Layer -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGlow)"/>
+
+  <!-- Outer Glowing Shield Border -->
+  <path d="M256 64 L384 112 V240 C384 328 320 404 256 448 C192 404 128 328 128 240 V112 Z" 
+        fill="none" 
+        stroke="url(#brandGrad)" 
+        stroke-width="16" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+
+  <!-- Inner Shield Fill -->
+  <path d="M256 88 L360 128 V240 C360 312 306 376 256 412 C206 376 152 312 152 240 V128 Z" 
+        fill="url(#brandGrad)" 
+        opacity="0.15"/>
+
+  <!-- Typography AS -->
+  <text x="256" y="275" 
+        font-family="system-ui, -apple-system, sans-serif" 
+        font-weight="900" 
+        font-size="110" 
+        fill="url(#brandGrad)" 
+        text-anchor="middle" 
+        letter-spacing="4">AS</text>
+
+  <!-- Small Security Lock Icon Accent -->
+  <path d="M256 310 C242.7 310 232 320.7 232 334 V350 H280 V334 C280 320.7 269.3 310 256 310 Z" 
+        fill="none" 
+        stroke="url(#brandGrad)" 
+        stroke-width="10"/>
+  <rect x="224" y="350" width="64" height="40" rx="8" fill="url(#brandGrad)"/>
+</svg>

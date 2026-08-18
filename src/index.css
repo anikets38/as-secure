@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root[data-theme="dark"] {
+    --color-bg: #0B1120;
+    --color-surface: #151B2B;
+    --color-elevated: #1C2436;
+    --color-secondary-surface: #222B3D;
+    --color-border: #30394D;
+    --color-text: #F8FAFC;
+    --color-subtext: #CBD5E1;
+    --color-muted: #94A3B8;
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    --color-bg: #FFF9FC;
+    --color-surface: #FFFFFF;
+    --color-elevated: #FFFFFF;
+    --color-secondary-surface: #FFF1F7;
+    --color-border: #F1DCE7;
+    --color-text: #1F1720;
+    --color-subtext: #6B5A66;
+    --color-muted: #9A8994;
+    color-scheme: light;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    overflow-x: hidden;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom Utilities for Security Badges and Visual Glows */
+.brand-text-gradient {
+  background: linear-gradient(135deg, #D65DB1 0%, #FF6F91 50%, #FF9671 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-border-gradient {
+  border-image: linear-gradient(135deg, #D65DB1 0%, #FF6F91 50%, #FF9671 100%) 1;
+}
+
+.vault-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.vault-card:hover {
+  border-color: rgba(214, 93, 177, 0.4);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #D65DB1;
+}
