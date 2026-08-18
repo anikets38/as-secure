@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { db, DEFAULT_CATEGORIES } from '@/lib/db/db';
 import { DocumentRecord } from '@/types';
 import { useVault } from '@/contexts/VaultContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { syncCloudDocumentMetadata } from '@/services/sync/syncService';
 import { getDecryptedDocumentBlobUrl, deleteDocumentService } from '@/services/documents/documentService';
 import {
   FileText,
@@ -24,6 +26,7 @@ export const Documents: React.FC = () => {
   const selectedDocId = searchParams.get('id');
 
   const { activeKey } = useVault();
+  const { session } = useAuth();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [filteredDocs, setFilteredDocs] = useState<DocumentRecord[]>([]);
@@ -39,9 +42,12 @@ export const Documents: React.FC = () => {
 
   useEffect(() => {
     loadDocuments();
-  }, []);
+  }, [session.user?.id]);
 
   async function loadDocuments() {
+    if (session.user?.id) {
+      await syncCloudDocumentMetadata(session.user.id);
+    }
     const docs = await db.documents.orderBy('updatedAt').reverse().toArray();
     setDocuments(docs);
   }

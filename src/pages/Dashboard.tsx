@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { db, DEFAULT_CATEGORIES } from '@/lib/db/db';
 import { DocumentRecord } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { syncCloudDocumentMetadata } from '@/services/sync/syncService';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   FileText,
@@ -15,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
+  const { session } = useAuth();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -26,6 +29,9 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     async function loadData() {
+      if (session.user?.id) {
+        await syncCloudDocumentMetadata(session.user.id);
+      }
       const allDocs = await db.documents.orderBy('updatedAt').reverse().toArray();
       setDocuments(allDocs);
 
@@ -49,7 +55,7 @@ export const Dashboard: React.FC = () => {
     }
 
     loadData();
-  }, []);
+  }, [session.user?.id]);
 
   return (
     <div className="space-y-6">
