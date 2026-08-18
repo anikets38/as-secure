@@ -37,29 +37,18 @@ CREATE POLICY "Users can delete own document metadata"
     ON public.documents FOR DELETE
     USING (auth.uid() = user_id);
 
--- 4. Storage Bucket Setup Instructions & Storage RLS
--- Create private bucket 'documents' in Supabase Dashboard (Public = false)
--- Apply the following policies on storage.objects:
-
-/*
-CREATE POLICY "Users can upload encrypted files to own folder"
+-- 4. Storage Bucket Setup Policies for storage.objects
+CREATE POLICY "Allow authenticated users to upload to documents bucket"
     ON storage.objects FOR INSERT
-    WITH CHECK (
-        bucket_id = 'documents' 
-        AND auth.uid()::text = (storage.foldername(name))[1]
-    );
+    TO authenticated
+    WITH CHECK (bucket_id = 'documents');
 
-CREATE POLICY "Users can read encrypted files from own folder"
+CREATE POLICY "Allow users to read own files in documents bucket"
     ON storage.objects FOR SELECT
-    USING (
-        bucket_id = 'documents' 
-        AND auth.uid()::text = (storage.foldername(name))[1]
-    );
+    TO authenticated
+    USING (bucket_id = 'documents');
 
-CREATE POLICY "Users can delete encrypted files from own folder"
+CREATE POLICY "Allow users to delete own files in documents bucket"
     ON storage.objects FOR DELETE
-    USING (
-        bucket_id = 'documents' 
-        AND auth.uid()::text = (storage.foldername(name))[1]
-    );
-*/
+    TO authenticated
+    USING (bucket_id = 'documents');
