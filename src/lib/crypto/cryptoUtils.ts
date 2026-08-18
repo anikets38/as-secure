@@ -1,17 +1,17 @@
 /**
  * Helper cryptographic utility functions for ArrayBuffer <-> Base64 conversion
- * and random salt / IV generation using browser Web Crypto API.
+ * and random salt / IV generation using Web Crypto API across browser and workers.
  */
 
 export function generateRandomSalt(byteLength: number = 16): string {
   const array = new Uint8Array(byteLength);
-  window.crypto.getRandomValues(array);
+  globalThis.crypto.getRandomValues(array);
   return bufferToBase64(array.buffer);
 }
 
 export function generateRandomIV(byteLength: number = 12): { raw: Uint8Array; base64: string } {
   const iv = new Uint8Array(byteLength);
-  window.crypto.getRandomValues(iv);
+  globalThis.crypto.getRandomValues(iv);
   return {
     raw: iv,
     base64: bufferToBase64(iv.buffer)
@@ -24,11 +24,11 @@ export function bufferToBase64(buffer: ArrayBuffer): string {
   for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
-  return window.btoa(binary);
+  return globalThis.btoa(binary);
 }
 
 export function base64ToBuffer(base64: string): ArrayBuffer {
-  const binaryString = window.atob(base64);
+  const binaryString = globalThis.atob(base64);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
@@ -38,9 +38,8 @@ export function base64ToBuffer(base64: string): ArrayBuffer {
 
 /**
  * Computes SHA-256 hash of a file ArrayBuffer for local duplicate detection.
- * Never transmitted over net in plaintext.
  */
 export async function computeFileHash(buffer: ArrayBuffer): Promise<string> {
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', buffer);
   return bufferToBase64(hashBuffer);
 }

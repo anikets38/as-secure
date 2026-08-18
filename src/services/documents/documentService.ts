@@ -22,12 +22,15 @@ function packIvAndCiphertext(ivBase64: string, ciphertextBuffer: ArrayBuffer): A
  */
 function unpackIvAndCiphertext(packedBuffer: ArrayBuffer): { ivBase64: string; ciphertextBuffer: ArrayBuffer } {
   const packedArray = new Uint8Array(packedBuffer);
-  const ivRaw = packedArray.slice(0, 12);
-  const ciphertextRaw = packedArray.slice(12);
+  const ivArray = packedArray.slice(0, 12);
+  const ciphertextArray = packedArray.slice(12);
+
+  const ivBuffer = ivArray.buffer.slice(ivArray.byteOffset, ivArray.byteOffset + ivArray.byteLength);
+  const ciphertextBuffer = ciphertextArray.buffer.slice(ciphertextArray.byteOffset, ciphertextArray.byteOffset + ciphertextArray.byteLength);
 
   return {
-    ivBase64: bufferToBase64(ivRaw.buffer),
-    ciphertextBuffer: ciphertextRaw.buffer
+    ivBase64: bufferToBase64(ivBuffer),
+    ciphertextBuffer
   };
 }
 
