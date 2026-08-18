@@ -21,7 +21,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [activeKey, setActiveKey] = useState<CryptoKey | null>(null);
   const [autoLockMinutes, setAutoLockMinutesState] = useState<number>(15);
-  const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check vault initialization status on load
   useEffect(() => {
