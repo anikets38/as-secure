@@ -8,7 +8,7 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
 
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('aniket.shinde21450@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
