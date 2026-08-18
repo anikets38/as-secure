@@ -27,6 +27,11 @@ export class ASSecureDatabase extends Dexie {
       vaultMetadata: 'id',
       syncQueue: 'id, documentId, action, status, createdAt'
     });
+
+    // Version 2: Index userId for multi-user querying & strict device isolation
+    this.version(2).stores({
+      documents: 'id, userId, title, categoryId, syncStatus, localAvailable, createdAt, updatedAt'
+    });
   }
 }
 

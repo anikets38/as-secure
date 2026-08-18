@@ -32,9 +32,11 @@ export const Dashboard: React.FC = () => {
       if (session.user?.id) {
         await syncCloudDocumentMetadata(session.user.id);
       }
-      const allDocs = session.user?.id
-        ? await db.documents.where('userId').equals(session.user.id).toArray()
-        : await db.documents.orderBy('updatedAt').reverse().toArray();
+      let allDocs = await db.documents.orderBy('updatedAt').reverse().toArray();
+      if (session.user?.id) {
+        const currentUserId = session.user.id;
+        allDocs = allDocs.filter(d => d.userId === currentUserId);
+      }
         
       setDocuments(allDocs);
 
