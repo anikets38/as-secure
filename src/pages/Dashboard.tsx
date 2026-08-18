@@ -32,7 +32,10 @@ export const Dashboard: React.FC = () => {
       if (session.user?.id) {
         await syncCloudDocumentMetadata(session.user.id);
       }
-      const allDocs = await db.documents.orderBy('updatedAt').reverse().toArray();
+      const allDocs = session.user?.id
+        ? await db.documents.where('userId').equals(session.user.id).toArray()
+        : await db.documents.orderBy('updatedAt').reverse().toArray();
+        
       setDocuments(allDocs);
 
       const total = allDocs.length;

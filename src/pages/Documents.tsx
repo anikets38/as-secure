@@ -52,7 +52,9 @@ export const Documents: React.FC = () => {
     if (session.user?.id) {
       await syncCloudDocumentMetadata(session.user.id);
     }
-    const docs = await db.documents.orderBy('updatedAt').reverse().toArray();
+    const docs = session.user?.id
+      ? await db.documents.where('userId').equals(session.user.id).toArray()
+      : await db.documents.orderBy('updatedAt').reverse().toArray();
     setDocuments(docs);
   }
 

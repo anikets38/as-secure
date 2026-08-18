@@ -26,18 +26,15 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
       return { syncedCount: 0, error: error.message };
     }
 
-    if (!cloudDocs || cloudDocs.length === 0) {
+    if (!cloudDocs) {
       return { syncedCount: 0 };
     }
 
+    const cloudDocMap = new Map(cloudDocs.map(c => [c.id, c]));
     let syncedCount = 0;
 
-    // Create a map of existing local documents to identify what to delete
-    const localDocMap = new Map((await db.documents.where('userId').equals(userId).toArray()).map(d => [d.id, d]));
-
-    // 2. Reconcile each cloud document record with local IndexedDB
+    // 2. Reconcile each cloud document record into local IndexedDB
     for (const cloudDoc of cloudDocs) {
-      localDocMap.delete(cloudDoc.id);
       const cachedFile = await db.cachedFiles.get(cloudDoc.id);
 
       const reconciledRecord: DocumentRecord = {
@@ -52,7 +49,7 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
         encryptionVersion: cloudDoc.encryption_version || 1,
         createdAt: cloudDoc.created_at,
         updatedAt: cloudDoc.updated_at,
-        localAvailable: Boolean(cachedFile), // true if encrypted blob is cached on this device
+        localAvailable: Boolean(cachedFile),
         syncStatus: 'synced',
         isEncrypted: true
       };
@@ -61,42 +58,12 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
       syncedCount++;
     }
 
-    // Delete any local documents that no longer exist in Cloud (stale duplicates)
-    for (const [staleId] of localDocMap.entries()) {
-      await db.documents.delete(staleId);
-      await db.cachedFiles.delete(staleId);
-    }
-
-    // 3. Process any pending local upload items in queue
-    const pendingDocs = await db.documents
-      .where('syncStatus')
-      .equals('pending')
-      .toArray();
-
-    for (const pendingDoc of pendingDocs) {
-      const cachedFile = await db.cachedFiles.get(pendingDoc.id);
-      if (cachedFile) {
-        const encryptedBlob = new Blob([cachedFile.encryptedBlob], { type: 'application/octet-stream' });
-        const { error: uploadErr } = await supabase.storage
-          .from('documents')
-          .upload(pendingDoc.storagePath, encryptedBlob, { contentType: 'application/octet-stream', upsert: true });
-
-        if (!uploadErr) {
-          await supabase.from('documents').upsert({
-            id: pendingDoc.id,
-            user_id: userId,
-            title: pendingDoc.title,
-            category_id: pendingDoc.categoryId,
-            tags: pendingDoc.tags,
-            storage_path: pendingDoc.storagePath,
-            mime_type: pendingDoc.mimeType,
-            file_size: pendingDoc.fileSize,
-            encryption_version: 1,
-            created_at: pendingDoc.createdAt,
-            updated_at: pendingDoc.updatedAt
-          });
-          await db.documents.update(pendingDoc.id, { syncStatus: 'synced' });
-        }
+    // 3. Purge all local IndexedDB document records that do NOT exist in Cloud Postgres
+    const allLocalDocs = await db.documents.toArray();
+    for (const localDoc of allLocalDocs) {
+      if (!cloudDocMap.has(localDoc.id) && localDoc.syncStatus === 'synced') {
+        await db.documents.delete(localDoc.id);
+        await db.cachedFiles.delete(localDoc.id);
       }
     }
 
