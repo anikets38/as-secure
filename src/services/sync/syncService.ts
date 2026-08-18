@@ -32,9 +32,12 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
 
     let syncedCount = 0;
 
+    // Create a map of existing local documents to identify what to delete
+    const localDocMap = new Map((await db.documents.where('userId').equals(userId).toArray()).map(d => [d.id, d]));
+
     // 2. Reconcile each cloud document record with local IndexedDB
     for (const cloudDoc of cloudDocs) {
-      const localExisting = await db.documents.get(cloudDoc.id);
+      localDocMap.delete(cloudDoc.id);
       const cachedFile = await db.cachedFiles.get(cloudDoc.id);
 
       const reconciledRecord: DocumentRecord = {
@@ -56,6 +59,12 @@ export async function syncCloudDocumentMetadata(userId: string): Promise<{
 
       await db.documents.put(reconciledRecord);
       syncedCount++;
+    }
+
+    // Delete any local documents that no longer exist in Cloud (stale duplicates)
+    for (const [staleId] of localDocMap.entries()) {
+      await db.documents.delete(staleId);
+      await db.cachedFiles.delete(staleId);
     }
 
     // 3. Process any pending local upload items in queue
