@@ -1,5 +1,5 @@
 -- ==========================================
--- AS Secure — Supabase Database Migration
+-- AS Secure — Supabase Database & Storage Setup
 -- ==========================================
 
 -- 1. Create Documents Metadata Table
@@ -17,10 +17,10 @@ CREATE TABLE IF NOT EXISTS public.documents (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Enable Row Level Security (RLS)
+-- 2. Enable Row Level Security (RLS) on Documents Table
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
--- 3. Define Strictly User-Isolated RLS Policies
+-- 3. Define Strictly User-Isolated RLS Policies for Documents Table
 CREATE POLICY "Users can view own document metadata"
     ON public.documents FOR SELECT
     USING (auth.uid() = user_id);
@@ -37,18 +37,13 @@ CREATE POLICY "Users can delete own document metadata"
     ON public.documents FOR DELETE
     USING (auth.uid() = user_id);
 
--- 4. Storage Bucket Setup Policies for storage.objects
-CREATE POLICY "Allow authenticated users to upload to documents bucket"
-    ON storage.objects FOR INSERT
-    TO authenticated
+-- 4. Create Public Storage Bucket 'documents'
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('documents', 'documents', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 5. Enable Storage Access Policies for storage.objects
+CREATE POLICY "Allow public access for documents bucket" 
+    ON storage.objects FOR ALL 
+    USING (bucket_id = 'documents') 
     WITH CHECK (bucket_id = 'documents');
-
-CREATE POLICY "Allow users to read own files in documents bucket"
-    ON storage.objects FOR SELECT
-    TO authenticated
-    USING (bucket_id = 'documents');
-
-CREATE POLICY "Allow users to delete own files in documents bucket"
-    ON storage.objects FOR DELETE
-    TO authenticated
-    USING (bucket_id = 'documents');

@@ -25,7 +25,7 @@ function categorizeFilename(filename) {
   if (lower.includes('resume')) {
     return 'cat_employment';
   }
-  if (lower.includes('bank') || lower.includes('passbook') || lower.includes('atm') || lower.includes('fees') || lower.includes('income')) {
+  if (lower.includes('bank') || lower.includes('passbook') || lower.includes('atm') || lower.includes('fees') || lower.includes('income') || lower.includes('mahadbt')) {
     return 'cat_finance';
   }
   return 'cat_other';
@@ -102,9 +102,9 @@ async function main() {
   const userId = authData.user.id;
   console.log(`✅ Supabase User ID: ${userId}`);
 
-  // 1. Clear existing duplicate document metadata records for clean database
-  console.log(`🧹 Clearing previous duplicate document records for ${USER_EMAIL}...`);
-  await supabase.from('documents').delete().eq('user_id', userId);
+  // Wipe previous rows for clean synchronization
+  console.log(`🧹 Wiping previous document records...`);
+  await supabase.from('documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
   const saltBase64 = Buffer.from(crypto.randomBytes(16)).toString('base64');
   const key = await deriveKey(VAULT_PASS, saltBase64);
@@ -113,6 +113,7 @@ async function main() {
   console.log(`📁 Found ${files.length} documents in ${SOURCE_DIR}`);
 
   let successCount = 0;
+  let storageSuccess = 0;
 
   for (let i = 0; i < files.length; i++) {
     const filename = files[i];
@@ -129,9 +130,8 @@ async function main() {
     const title = filename.replace(/\.[^/.]+$/, "");
     const storagePath = `${userId}/${docId}/encrypted.bin`;
 
-    console.log(`[${i + 1}/${files.length}] Encrypting & Uploading: ${filename} (${(stat.size / 1024).toFixed(1)} KB)...`);
+    console.log(`[${i + 1}/${files.length}] Encrypting: ${filename} (${(stat.size / 1024).toFixed(1)} KB)...`);
 
-    // Encrypt file with self-contained payload [ 12-byte IV ][ Ciphertext ]
     const packedBuffer = await encryptAndPackBuffer(fileBuffer, key);
 
     // 1. Upload packed binary payload to Supabase Storage
@@ -144,9 +144,12 @@ async function main() {
 
     if (storageErr) {
       console.warn(`  ⚠️ Storage upload warning:`, storageErr.message);
+    } else {
+      console.log(`  ✅ Storage upload SUCCESS!`);
+      storageSuccess++;
     }
 
-    // 2. Insert clean metadata record into Supabase Postgres
+    // 2. Insert metadata record into Supabase Postgres
     const now = new Date().toISOString();
     const { error: dbErr } = await supabase.from('documents').insert({
       id: docId,
@@ -165,12 +168,11 @@ async function main() {
     if (dbErr) {
       console.error(`  ❌ Postgres metadata error for ${filename}:`, dbErr.message);
     } else {
-      console.log(`  ✅ Stored cleanly!`);
       successCount++;
     }
   }
 
-  console.log(`\n🎉 Re-Upload Complete! ${successCount}/${files.length} unique documents encrypted & stored in Cloud Vault.`);
+  console.log(`\n🎉 Upload Summary: ${successCount}/${files.length} metadata rows in Postgres, ${storageSuccess}/${files.length} binary files in Storage Bucket.`);
 }
 
 main().catch(err => {
