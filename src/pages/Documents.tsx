@@ -22,15 +22,13 @@ import {
 
 export const Documents: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const initialCategory = searchParams.get('category') || 'all';
   const selectedDocId = searchParams.get('id');
-
   const { activeKey } = useVault();
   const { session } = useAuth();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [filteredDocs, setFilteredDocs] = useState<DocumentRecord[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
+  const [selectedCategory, setSelectedCategory] = useState<string>(searchParams.get('category') || 'all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Preview Modal state
@@ -39,6 +37,12 @@ export const Documents: React.FC = () => {
   const [previewMimeType, setPreviewMimeType] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Sync category state whenever searchParams changes
+  useEffect(() => {
+    const catFromUrl = searchParams.get('category') || 'all';
+    setSelectedCategory(catFromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     loadDocuments();
@@ -55,8 +59,12 @@ export const Documents: React.FC = () => {
   useEffect(() => {
     let result = documents;
 
-    if (selectedCategory !== 'all') {
-      result = result.filter(d => d.categoryId === selectedCategory);
+    if (selectedCategory && selectedCategory !== 'all') {
+      const catTarget = selectedCategory.toLowerCase();
+      result = result.filter(d => {
+        const docCat = (d.categoryId || '').toLowerCase();
+        return docCat === catTarget || docCat.includes(catTarget.replace('cat_', ''));
+      });
     }
 
     if (searchQuery.trim()) {
